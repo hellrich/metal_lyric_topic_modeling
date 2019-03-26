@@ -1,4 +1,4 @@
-bin/mallet editiert für mehr RAM
+bin/mallet edited to increase RAM
 
 
 cd /home/hellrich/metal-medieval/mallet-2.0.8
@@ -14,64 +14,24 @@ top words per topic file
  --output-topic-keys
  --xml-topic-phrase-report 
 
-einschlägige dokumente pro topic, macht fehler
- --output-topic-docs
- --num-top-docs
--------------> vermutlich muss ich input anders vorverarbeiten, alles in einen ordner und band-album benennen?
-
-Preprocess & mix
-find books/*/* | while read file; do cp $file mix/TYPE_BOOK-$(basename $file); done
-for band in lyrics/*; do for album in $band/* ; do cp $album mix/TYPE_ALBUM-$(basename $band)-$(basename $album); done; done
-
-#ähnlich groß, pro band
-cd /home/hellrich/metal-medieval
-find books/*/* | while read file; do cp $file simmix/TYPE_BOOK-$(basename $file); done
-for band in lyrics/a*; cat $band/* > simmix/TYPE_ALBUM-$(basename $band); done;
-cd /home/hellrich/metal-medieval/mallet-2.0.8
-bin/mallet import-dir --input ../simmix --output ../simmix.raw.mallet --keep-sequence --remove-stopwords TRUE
-bin/mallet train-topics --input ../simmix.raw.mallet --num-threads 20 --num-topics 100 --num-iterations 100  --output-topic-keys topic-keys  --output-doc-topics doc-topics
-python ../analyze.py doc-topics topic-keys --minimum 0.001 --examples 22
-
-a 3577861 total
-b 2073669 total
-
---> resultiert in overlap-clustern die zwischen training (je 1k iter) nicht stabil sind, also doch nur metal
-
+# experimenting with different numbers of topics, finally used 50
 mkdir per_band
 for band in lyrics/*; do cat $band/* > per_band/$(basename $band); done;
 cd /home/hellrich/metal-medieval/mallet-2.0.8
 bin/mallet import-dir --input ../per_band --output ../per_band.mallet --keep-sequence --remove-stopwords TRUE
-mkdir ../per_band_results
-for x in {1..10}; do bin/mallet train-topics --input ../per_band.mallet --num-threads 20 --num-topics 50 --num-iterations 1000 --output-topic-keys ../per_band_results/topic-keys-$x --output-doc-topics ../per_band_results/doc-topics-$x ; done
-
---> ergebnis sieht langweilig aus, fast nur sprachen als topics, testen mit 100 statt 50
-mkdir ../per_band_results_100
-for x in {1..10}; do bin/mallet train-topics --input ../per_band.mallet --num-threads 20 --num-topics 100 --num-iterations 1000 --output-topic-keys ../per_band_results_100/topic-keys-$x --output-doc-topics ../per_band_results_100/doc-topics-$x ; done
-
-
-### hab auch mit --optimize-interval 10 getestet, dadurch topic nicht gleich groß, wirkt gut
-
---> mal 200 testen
-mkdir ../per_band_results_opt_200; for x in {1..10}; do bin/mallet train-topics --input ../per_band.mallet --num-threads 20 --num-topics 200 --num-iterations 5000 --optimize-interval 10 --output-topic-keys ../per_band_results_opt_200/topic-keys-$x --output-doc-topics ../per_band_results_opt_200/doc-topics-$x ; done
---> zu viele überlappungen zwischen themen, 100 wirkten besser
-
---> reichen 50? gehen 150? 75?
 for lim in 50 75 150; do mkdir ../per_band_results_opt_$lim; for x in {1..10}; do bin/mallet train-topics --input ../per_band.mallet --num-threads 20 --num-topics $lim --num-iterations 5000 --optimize-interval 10 --output-topic-keys ../per_band_results_opt_$lim/topic-keys-$x --output-doc-topics ../per_band_results_opt_$lim/doc-topics-$x ; done ; done
 
 
---- German Stopwords: http://snowball.tartarus.org/algorithms/german/stop.txt "die" und "man" enfernet wg ambig mit Englisch
+# German Stopwords: http://snowball.tartarus.org/algorithms/german/stop.txt removed "die" und "man" (also English non stopwords)
 bin/mallet import-dir --input ../per_band --output ../per_band_german_stopwords.mallet --keep-sequence --remove-stopwords TRUE --extra-stopwords ../german-stopwords-snowwball
 
--------final
---- extra-stopwords: added some english contractions caused by tokenizer
+# final processing code
+# extra-stopwords: added some english contractions caused by tokenizer
 bin/mallet import-dir --input ../per_band --output ../per_band_stopwords.mallet --keep-sequence --remove-stopwords TRUE --extra-stopwords ../extra-stoppwords
---- 100 topics mit 5k iterationen sollte gut sein, Konvergenz bis 10k getestet und ab ca. 5k geht es auf und ab
-mkdir ../per_band_results_final; for x in {1..10}; do bin/mallet train-topics --input ../per_band_stopwords.mallet --num-threads 20 --num-topics 100 --num-iterations 5000 --optimize-interval 10 --output-topic-keys ../per_band_results_final/topic-keys-$x --output-doc-topics ../per_band_results_final/doc-topics-$x ; done
-
---- AAAABER: beim interpretieren sehen 100 doch nicht gut aus, noch mal auf neuen daten 50er, mit 3500 (ab da etwa converged) und 75er (nehmen wir mal 4k)
+# 50 topics with 3,5K iterations looked nice in pre-tests, 10 runs to counter probabilistic nature
 n=50; it=3500; mkdir ../per_band_results_final_$n; for x in {1..10}; do bin/mallet train-topics --input ../per_band_stopwords.mallet --num-threads 20 --num-topics $n --num-iterations $it --optimize-interval 10 --output-topic-keys ../per_band_results_final_$n/topic-keys-$x; done; n=75; it=4000; mkdir ../per_band_results_final_$n; for x in {1..10}; do bin/mallet train-topics --input ../per_band_stopwords.mallet --num-threads 20 --num-topics $n --num-iterations $it --optimize-interval 10 --output-topic-keys ../per_band_results_final_$n/topic-keys-$x; done
 
---- problem: es fehlt separator zwischen dateien beim cat, füre echo ein und reprozessiere, habe skript für training 3 varianten final geschrieben
+# improved preprocessing script, inserts seperator (ran processing again thereafter)
 mkdir per_band_sep
 for band in lyrics/*; do (for x in $band/*; do cat $x; echo ; done) > per_band_sep/$(basename $band); done;
 bin/mallet import-dir --input ../per_band_sep --output ../per_band_stopwords.mallet --keep-sequence --remove-stopwords TRUE --extra-stopwords ../extra-stoppwords
